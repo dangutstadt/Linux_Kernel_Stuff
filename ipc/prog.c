@@ -65,7 +65,7 @@ void listdir(const char *name, int indent, Dir *dir_list_instance)
             // Folder
 
             snprintf(path, sizeof(path), "%s/%s", name, entry->d_name);
-            key_t key = ftok("/home/osboxes/Desktop/a.out", 'z');
+            key_t key = ftok("/Users/tcherner/Projects/colman/Linux_Kernel_Stuff/ipc.out", 'z');
             int msqid = msgget(key, 0666 | IPC_CREAT);
 
             if (!fork())
