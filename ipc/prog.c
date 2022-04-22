@@ -95,7 +95,7 @@ void listdir(const char *name, int indent, Dir *dir_list_instance)
                 msgrcv(msqid, &pmb, sizeof(char) * 1024, 1, 0);
 
                 wait(NULL);
-                printf("Father your son is: %s\n", pmb.path);
+                //printf("Father your son is: %s\n", pmb.path);
                 dir_list_instance->arr_dirs = realloc(dir_list_instance->arr_dirs, sizeof(dir_list_instance->arr_dirs) + sizeof(Dir));
                 // dir_list_instance->arr_dirs[dir_list_instance->dir_info_index++] = pmb.dir;
             }
