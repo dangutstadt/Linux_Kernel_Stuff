@@ -118,7 +118,6 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
                 pmb.mtype = 1;
                 pmb.dir = dir_list_sub_inst;
                 
-                printf("%s: files in folder: %d, sizeof %ld\n", pmb.dir.path, pmb.dir.files_in_folder, sizeof(dir_info));
                 msgsnd(msqid, &pmb, sizeof(dir_info), 0);
                 msgctl(msqid, IPC_RMID, NULL);
             }
@@ -126,7 +125,6 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
             {
                 // in Parent
                 msg_q pmb;
-                printf("%ld\n", msgrcv(msqid, &pmb, sizeof(dir_info), 1, 0));
 
                 wait(NULL);
 
@@ -145,7 +143,6 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
             pipe(pfds);
             if (fork() == 0)
             {
-                printf("ppid:[%d] pid:[%d]\t%s\n", getppid(), getpid(), path);
                 close(1);
                 dup(pfds[1]);
                 close(pfds[0]);
