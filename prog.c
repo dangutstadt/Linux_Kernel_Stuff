@@ -28,16 +28,10 @@ struct dir_info
     file_info* pFiles;
 };
 
-
-typedef struct _msg_txt {
-    char path[PATH_MAX];
-    dir_info dir;
-} msg_text;
-
 typedef struct msg_q
 {
     long mtype;
-    msg_text data;
+    dir_info dir;
 } msg_q;
 
 
@@ -122,27 +116,24 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
                 // pass to parent
                 msg_q pmb;
                 pmb.mtype = 1;
-                strcpy(pmb.data.path, dir_list_sub_inst.path);
-                pmb.data.dir = dir_list_sub_inst;
+                pmb.dir = dir_list_sub_inst;
                 
-                printf("%s: files in folder: %d, pointer %p\n", pmb.data.dir.path, pmb.data.dir.files_in_folder, &pmb.data.dir);
-                msgsnd(msqid, &pmb, sizeof(msg_text), 0);
+                printf("%s: files in folder: %d, sizeof %ld\n", pmb.dir.path, pmb.dir.files_in_folder, sizeof(dir_info));
+                msgsnd(msqid, &pmb, sizeof(dir_info), 0);
                 msgctl(msqid, IPC_RMID, NULL);
             }
             else
             {
                 // in Parent
                 msg_q pmb;
-                printf("%ld\n", msgrcv(msqid, &pmb, sizeof(msg_text), 1, 0));
+                printf("%ld\n", msgrcv(msqid, &pmb, sizeof(dir_info), 1, 0));
 
                 wait(NULL);
 
                 if(pmb.mtype == 1)
                 {
-                    dir_list_instance->pDirs[dir_list_instance->dir_info_index] = pmb.data.dir;
+                    dir_list_instance->pDirs[dir_list_instance->dir_info_index] = pmb.dir;
                     dir_list_instance->dir_info_index++;
-                    printf("freeing %s\n", pmb.data.path);
-                    //free(pmb.data.dir);
                 }
             }
         }
