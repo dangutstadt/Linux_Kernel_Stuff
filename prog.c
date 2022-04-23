@@ -31,7 +31,7 @@ struct dir_info
 
 typedef struct _msg_txt {
     char path[PATH_MAX];
-    dir_info *dir;
+    dir_info dir;
 } msg_text;
 
 typedef struct msg_q
@@ -110,11 +110,11 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
             if (fork() == 0)
             {
                 // in Child
-                dir_info* dir_list_sub_inst = malloc(sizeof(dir_info));
-                strcpy(dir_list_sub_inst->path, name);
+                dir_info dir_list_sub_inst;
+                strcpy(dir_list_sub_inst.path, name);
 
                 // Run on child folder
-                listdir(path, indent + 2, dir_list_sub_inst);
+                listdir(path, indent + 2, &dir_list_sub_inst);
 
                 b = 0;
                 
@@ -122,30 +122,27 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
                 // pass to parent
                 msg_q pmb;
                 pmb.mtype = 1;
-                strcpy(pmb.data.path, dir_list_sub_inst->path);
-                pmb.data.dir = malloc(sizeof(dir_info));
-                *pmb.data.dir = *dir_list_sub_inst;
-
-                free(dir_list_sub_inst);
+                strcpy(pmb.data.path, dir_list_sub_inst.path);
+                pmb.data.dir = dir_list_sub_inst;
                 
-                printf("%s: files in folder: %d\n", pmb.data.dir->path, pmb.data.dir->files_in_folder);
-                msgsnd(msqid, &pmb, sizeof(pmb.data), 0);
-                //msgctl(msqid, IPC_RMID, NULL);
+                printf("%s: files in folder: %d, pointer %p\n", pmb.data.dir.path, pmb.data.dir.files_in_folder, &pmb.data.dir);
+                msgsnd(msqid, &pmb, sizeof(msg_text), 0);
+                msgctl(msqid, IPC_RMID, NULL);
             }
             else
             {
                 // in Parent
                 msg_q pmb;
-                msgrcv(msqid, &pmb, sizeof(pmb.data), 1, 0);
+                printf("%ld\n", msgrcv(msqid, &pmb, sizeof(msg_text), 1, 0));
 
                 wait(NULL);
 
                 if(pmb.mtype == 1)
                 {
-                    memcpy(&(dir_list_instance->pDirs[dir_list_instance->dir_info_index]), pmb.data.dir, sizeof(dir_info));
+                    dir_list_instance->pDirs[dir_list_instance->dir_info_index] = pmb.data.dir;
                     dir_list_instance->dir_info_index++;
                     printf("freeing %s\n", pmb.data.path);
-                    free(pmb.data.dir);
+                    //free(pmb.data.dir);
                 }
             }
         }
