@@ -170,6 +170,36 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
     closedir(dir);
 }
 
+float sum_words_in_folder(dir_info* dir)
+{
+    float sum = 0;
+    for (int i = 0; i < dir->file_info_index; i++)
+    {
+        file_info fi = (file_info)dir->pFiles[i];
+        sum += fi.num_words;
+    }
+
+    return sum;
+}
+
+// *****************************************************
+// TODO: DAN THIS DOES NOT CALCULATE THE CORRECT AVG!!!!
+// Need to implement correctly, plus add a variance calc
+// *****************************************************
+float calc_avg(dir_info* dir)
+{
+    float sum = sum_words_in_folder(dir);
+    float counter = dir->files_in_folder;
+
+    for (int i = 0; i < dir->dirs_in_folder; i++)
+    {
+        dir_info di = (dir_info)(dir->pDirs[i]);
+        sum += sum_words_in_folder(&di);
+        counter += di.files_in_folder;
+    }
+
+    return sum / counter;
+}
 
 int main(int argc, char *argv[])
 {
@@ -177,23 +207,12 @@ int main(int argc, char *argv[])
     dir_info dir_list_instance;
 
     listdir(argv[1], 1, &dir_list_instance);
-    // for (int i = 0; i < (&dir_list_instance)->file_info_index; i++)
-    // {
-    //     file_info fi = (file_info)(&dir_list_instance)->pFiles[i];
-    //     //printf("\n[filename]=%s\n[wc]=%d\n", fi.path, fi.num_words);
-    // }
 
-    // for (int i = 0; i < (&dir_list_instance)->dir_info_index; i++)
-    // {
-    //     Dir di = (Dir)(&dir_list_instance)->pDirs[i];
-    //     printf("\n[folder]=%s, index=%d\n", di.path, di.dir_info_index);
-    //     // for (int j = 0; j < di.file_info_index; j++)
-    //     // {
-    //     //     file_info fi = (file_info)di.pFiles[j];
-    //     //     printf("\n[filename]=%s\n[wc]=%d\n", fi.path, fi.num_words);
-    //     // }
-    //     free(di.pFiles);
-    // }
+    float avg, variance;
+
+    avg = calc_avg(&dir_list_instance);
+
+    free(dir_list_instance.pFiles);
     free(dir_list_instance.pDirs);
     return 0;
 }
