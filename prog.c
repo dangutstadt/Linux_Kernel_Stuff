@@ -123,16 +123,20 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
                 msg_q pmb;
                 pmb.mtype = 1;
                 strcpy(pmb.data.path, dir_list_sub_inst->path);
-                pmb.data.dir = dir_list_sub_inst;
+                pmb.data.dir = malloc(sizeof(dir_info));
+                *pmb.data.dir = *dir_list_sub_inst;
 
-                msgsnd(msqid, &pmb, sizeof(msg_text), 0);
-                msgctl(msqid, IPC_RMID, NULL);
+                free(dir_list_sub_inst);
+                
+                printf("%s: files in folder: %d\n", pmb.data.dir->path, pmb.data.dir->files_in_folder);
+                msgsnd(msqid, &pmb, sizeof(pmb.data), 0);
+                //msgctl(msqid, IPC_RMID, NULL);
             }
             else
             {
                 // in Parent
                 msg_q pmb;
-                msgrcv(msqid, &pmb, sizeof(msg_text), 0, 0);
+                msgrcv(msqid, &pmb, sizeof(pmb.data), 1, 0);
 
                 wait(NULL);
 
@@ -140,6 +144,7 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
                 {
                     memcpy(&(dir_list_instance->pDirs[dir_list_instance->dir_info_index]), pmb.data.dir, sizeof(dir_info));
                     dir_list_instance->dir_info_index++;
+                    printf("freeing %s\n", pmb.data.path);
                     free(pmb.data.dir);
                 }
             }
@@ -152,6 +157,7 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
             pipe(pfds);
             if (fork() == 0)
             {
+                printf("ppid:[%d] pid:[%d]\t%s\n", getppid(), getpid(), path);
                 close(1);
                 dup(pfds[1]);
                 close(pfds[0]);
