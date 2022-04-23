@@ -57,6 +57,8 @@ void listdir(const char *name, int indent, Dir *dir_list_instance)
         }
     }
     rewinddir(dir);
+
+    dir_list_instance->pFiles = (file_info*) malloc (dir_list_instance->files_in_folder * sizeof(file_info));
     
     int b = 1;
     file_info file_info_instance;
@@ -131,7 +133,6 @@ void listdir(const char *name, int indent, Dir *dir_list_instance)
                 scanf("%d %s", &file_info_instance->num_words, t);
 
                 wait(NULL);
-                dir_list_instance->pFiles = (file_info*) malloc (dir_list_instance->files_in_folder * sizeof(file_info));
                 memcpy(&(dir_list_instance->pFiles[dir_list_instance->file_info_index]), file_info_instance, sizeof(file_info));
                 dir_list_instance->file_info_index++;
             }
