@@ -20,13 +20,17 @@ typedef struct dir_info dir_info;
 struct dir_info
 {
     char path[PATH_MAX];
-    int dir_info_index;
-    int file_info_index;
     int files_in_folder;
     int dirs_in_folder;
     dir_info *pDirs;
     file_info* pFiles;
 };
+
+typedef struct _dir_totals
+{
+    float avg;
+    int file_count;
+} dir_totals;
 
 typedef struct msg_q
 {
@@ -67,8 +71,6 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
 
     // init dir_list_instance
     strcpy(dir_list_instance->path, name);
-    dir_list_instance->dir_info_index = 0;
-    dir_list_instance->file_info_index = 0;
     dir_list_instance->files_in_folder = 0;
     dir_list_instance->dirs_in_folder = 0;
     dir_list_instance->pDirs = NULL;
@@ -85,6 +87,9 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
     dir_list_instance->pDirs = malloc (dir_list_instance->dirs_in_folder * sizeof(dir_info));
     
     int b = 1;
+
+    int file_index = 0;
+    int dir_index = 0;
     
     int pfds[2];
     while (b == 1 && (entry = readdir(dir)) != NULL)
@@ -120,6 +125,7 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
                 
                 msgsnd(msqid, &pmb, sizeof(dir_info), 0);
                 msgctl(msqid, IPC_RMID, NULL);
+                exit(0);
             }
             else
             {
@@ -131,8 +137,8 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
 
                 if(pmb.mtype == 1)
                 {
-                    dir_list_instance->pDirs[dir_list_instance->dir_info_index] = pmb.dir;
-                    dir_list_instance->dir_info_index++;
+                    dir_list_instance->pDirs[dir_index] = pmb.dir;
+                    dir_index++;
                 }
             }
         }
@@ -148,6 +154,7 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
                 dup(pfds[1]);
                 close(pfds[0]);
                 execlp("wc", "wc", "-w", path, NULL);
+                exit(0);
             }
             else
             {
@@ -160,8 +167,8 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
                 scanf("%d %s", &file_info_instance->num_words, t);
 
                 wait(NULL);
-                memcpy(&(dir_list_instance->pFiles[dir_list_instance->file_info_index]), file_info_instance, sizeof(file_info));
-                dir_list_instance->file_info_index++;
+                memcpy(&(dir_list_instance->pFiles[file_index]), file_info_instance, sizeof(file_info));
+                file_index++;
             }
 
             free(file_info_instance);
@@ -171,13 +178,18 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
     closedir(dir);
 }
 
-float sum_words_in_folder(dir_info* dir)
+float sum_words_in_folder(dir_info dir)
 {
     float sum = 0;
-    for (int i = 0; i < dir->file_info_index; i++)
+    for (int i = 0; i < dir.files_in_folder; i++)
     {
-        file_info fi = (file_info)dir->pFiles[i];
-        sum += fi.num_words;
+        //printf("i: %d, total: %d\n", i, dir->files_in_folder);
+        file_info fi = dir.pFiles[i];
+        if (fi.num_words < 0)
+        {
+            printf("%s %s\n", dir.path, fi.path);
+        }
+        //sum += fi.num_words;
     }
 
     return sum;
@@ -187,19 +199,16 @@ float sum_words_in_folder(dir_info* dir)
 // TODO: DAN THIS DOES NOT CALCULATE THE CORRECT AVG!!!!
 // Need to implement correctly, plus add a variance calc
 // *****************************************************
-float calc_avg(dir_info* dir)
+void calc_avg(dir_info dir, dir_totals* out)
 {
-    float sum = sum_words_in_folder(dir);
-    float counter = dir->files_in_folder;
-
-    for (int i = 0; i < dir->dirs_in_folder; i++)
+    printf("%s\n", dir.path);
+    for (int i = 0; i < dir.dirs_in_folder; i++)
     {
-        dir_info di = (dir_info)(dir->pDirs[i]);
-        sum += sum_words_in_folder(&di);
-        counter += di.files_in_folder;
+        calc_avg(dir.pDirs[i], out);
     }
 
-    return sum / counter;
+    out->file_count += dir.files_in_folder;
+    out->avg = (out->file_count * out->avg + sum_words_in_folder(dir)) / (out->file_count + 1);
 }
 
 int main(int argc, char *argv[])
@@ -211,7 +220,10 @@ int main(int argc, char *argv[])
 
     float avg, variance;
 
-    avg = calc_avg(&dir_list_instance);
+    dir_totals totals;
+    totals.file_count = 0;
+    totals.avg = 0.0;
+    calc_avg(dir_list_instance, &totals);
 
     free(dir_list_instance.pFiles);
     free(dir_list_instance.pDirs);
