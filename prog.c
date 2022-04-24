@@ -125,7 +125,8 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
             {
                 // in Parent
                 msg_q pmb;
-
+                msgrcv(msqid, &pmb, sizeof(dir_info), 1, 0);
+                
                 wait(NULL);
 
                 if(pmb.mtype == 1)
