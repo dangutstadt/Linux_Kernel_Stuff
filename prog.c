@@ -113,10 +113,10 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
                 strcpy(dir_list_sub_inst.path, name);
 
                 // Run on child folder
+                printf("Sending %s to listdir\n", path);
                 listdir(path, indent + 2, &dir_list_sub_inst);
 
                 b = 0;
-                
 
                 // pass to parent
                 msg_q pmb;
@@ -167,11 +167,10 @@ void listdir(const char *name, int indent, dir_info *dir_list_instance)
                 scanf("%d %s", &file_info_instance->num_words, t);
 
                 wait(NULL);
-                memcpy(&(dir_list_instance->pFiles[file_index]), file_info_instance, sizeof(file_info));
+                dir_list_instance->pFiles[file_index] = *file_info_instance;
+                printf("%s: has %d words\n", dir_list_instance->pFiles[file_index].path, dir_list_instance->pFiles[file_index].num_words);
                 file_index++;
             }
-
-            free(file_info_instance);
         }
     }
 
@@ -213,7 +212,6 @@ void calc_avg(dir_info dir, dir_totals* out)
 
 int main(int argc, char *argv[])
 {
-    printf("pid:[%d]\n", getpid());
     dir_info dir_list_instance;
 
     listdir(argv[1], 1, &dir_list_instance);
