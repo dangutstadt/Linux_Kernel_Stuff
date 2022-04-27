@@ -4,6 +4,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <string.h>
 
 #define PORT 8888
 #define BUFFER_SIZE 4096
@@ -11,6 +12,13 @@
 #define LEAVE_COMMAND -1
 
 typedef struct sockaddr saddr;
+
+typedef struct _obj {
+    int id;
+    char* url;
+    int size_downloaded;
+    int fd;
+} obj;
 
 int handle_show()
 {
@@ -94,7 +102,7 @@ int main(int argc, char *argv[])
             if(ret == LEAVE_COMMAND)
                 break;
             
-
+            memset(buffer, 0, BUFFER_SIZE);
         }
     }
 
