@@ -10,6 +10,7 @@
 #define BUFFER_SIZE 4096
 #define FD_COUNT 2 
 #define LEAVE_COMMAND -1
+#define INVALID_ARGUMENT -2
 
 typedef struct sockaddr saddr;
 
@@ -25,13 +26,22 @@ int handle_show()
     return 0;
 }
 
-int handle_start_stop(char* buffer)
+int handle_start(char* url)
 {
+    printf("[*] Starting to download from URL: %s\n", url);
+    return 0;
+}
+
+int handle_stop(char* id)
+{
+    printf("[*] Stopping download for ID: %s\n", id);
     return 0;
 }
 
 int parse_command(char* buffer)
 {
+    char *token;
+
     if(!strcmp(buffer, "leave\n"))
     {
         return LEAVE_COMMAND;
@@ -42,7 +52,17 @@ int parse_command(char* buffer)
     }
     else
     {
-        return handle_start_stop(buffer);
+        token = strtok(buffer, " ");
+        if (!strcmp(token, "start"))
+        {
+            return handle_start(strtok(NULL, " "));
+        }
+        else if (!strcmp(token, "stop"))
+        {
+            return handle_stop(strtok(NULL, " "));
+        }
+        
+        return INVALID_ARGUMENT;
     }
 }
 
@@ -73,7 +93,7 @@ int main(int argc, char *argv[])
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(PORT);
 
-    if(bind(fds[1].fd, (saddr*) &address, sizeof(address) < 0))
+    if(bind(fds[1].fd, (saddr*) &address, sizeof(address)) < 0)
     {
         printf("[ERROR] Couldn't bind to socket\n");
         goto cleanup;
@@ -100,7 +120,14 @@ int main(int argc, char *argv[])
 
             ret = parse_command(buffer);
             if(ret == LEAVE_COMMAND)
+            {
+                printf("[*] Leaving!\n");
                 break;
+            }
+            else if(ret == INVALID_ARGUMENT)
+            {  
+                printf("[ERROR] Invalid argument received\n");
+            }
             
             memset(buffer, 0, BUFFER_SIZE);
         }
