@@ -104,7 +104,7 @@ int main(int argc, char *argv[])
     // message queue starts here
 
     // generate IPC key
-    key_t key = ftok("/tmp", 'z');
+    key_t key = ftok("/tmp", 'r');
     int msqid = msgget(key, 0666 | IPC_CREAT);
     
     if (fork() == 0) {
@@ -123,7 +123,7 @@ int main(int argc, char *argv[])
     float  avg = 0;
     float  variance = 0;
 
-    // getting all the dirs info from message queue
+    // getting all dir infos from message queue
     while(msgrcv(msqid, &pmb, sizeof(file_info), 1, 0) != -1) {
 
         files = realloc(files, sizeof(file_info) * (files_counter + 1));
@@ -132,6 +132,7 @@ int main(int argc, char *argv[])
         avg += pmb.file_info.num_words;
     }
 
+    // calculate avg and variance
 
     printf("amnoit %d", files_counter);
     avg /= files_counter;
@@ -141,12 +142,13 @@ int main(int argc, char *argv[])
     }
     variance /= files_counter;
 
+    // filename data and summary
     for (int i = 0; i < files_counter; i++)
     {
-        printf("name: %s, words: %d, diff from average: %f\n", files[i].path, files[i].num_words, files[i].num_words - avg);
+        printf("[*] Name: %s, wc: %d, average deviation: %f\n", files[i].path, files[i].num_words, files[i].num_words - avg);
     }
     
-    printf("To Conclude\naverage: %f\nvariance: %f\n", avg, variance);
+    printf("\n\nSummary\n**************\nAverage: %f\nVariance: %f\n**************\n", avg, variance);
 
     free(files);
 
