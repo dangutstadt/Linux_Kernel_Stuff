@@ -14,12 +14,12 @@
 
 typedef struct sockaddr saddr;
 
-typedef struct _obj {
+typedef struct _download_obj {
     int id;
     char* url;
     int size_downloaded;
     int fd;
-} obj;
+} download_obj;
 
 int handle_show()
 {
@@ -74,6 +74,11 @@ int main(int argc, char *argv[])
     socklen_t addrlen;
     int byte_count = 0;
     int ret = 0;
+    int download_count = 0;
+    int recv_fd = 0;
+    download_obj* objs = malloc(0);
+
+
 
     static const int NO_TIMEOUT = -1;
     static const int SERVE_COUNT = 5;
@@ -111,7 +116,7 @@ int main(int argc, char *argv[])
         poll(fds, FD_COUNT, NO_TIMEOUT);
 
         // check if someone's ready to read
-        if(fds[0].revents & POLLIN)
+        if (fds[0].revents & POLLIN)
         {
             byte_count = read(STDIN_FILENO, buffer, BUFFER_SIZE - 1);
 
@@ -128,9 +133,19 @@ int main(int argc, char *argv[])
             {  
                 printf("[ERROR] Invalid argument received\n");
             }
-            
-            memset(buffer, 0, BUFFER_SIZE);
         }
+        else if (fds[1].revents & POLLIN)
+        {
+            recv_fd = accept(fds[1].fd, (saddr*) &address, (socklen_t*) &addrlen);
+            read(recv_fd, buffer, BUFFER_SIZE);
+
+            // TODO: Handle file from socket
+
+            close(recv_fd);
+        }
+
+        // zero out buffer for next poll
+        memset(buffer, 0, BUFFER_SIZE);
     }
 
 cleanup:
@@ -140,6 +155,17 @@ cleanup:
     {
         close(fds[1].fd);
     }
+
+    if(objs != NULL)
+    {
+        free(objs);
+    }
+    
+    if (recv_fd > STDERR_FILENO)
+    {
+        close(recv_fd);
+    }
+
 
     printf("---- Server exiting... ----\n");
     return 0;
