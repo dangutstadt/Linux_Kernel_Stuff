@@ -1,18 +1,28 @@
-#include <stdio.h>
-#include <poll.h>
-#include <stdbool.h>
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <stdio.h>
 #include <unistd.h>
+#include <poll.h>
+#include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
+#include <sys/sendfile.h>
+#include <sys/stat.h>
+#include <netdb.h>
 
-#define PORT 8888
+#define PORT 8887
 #define BUFFER_SIZE 4096
 #define FD_COUNT 2 
 #define LEAVE_COMMAND -1
 #define INVALID_ARGUMENT -2
 
 typedef struct sockaddr saddr;
+
+typedef struct _upload_obj {
+    int file_fd;
+    int socket_fd;
+} upload_obj;
 
 typedef struct _download_obj {
     int id;
@@ -74,9 +84,11 @@ int main(int argc, char *argv[])
     socklen_t addrlen;
     int byte_count = 0;
     int ret = 0;
-    int download_count = 0;
+    int uploads_count = 0;
     int recv_fd = 0;
     download_obj* objs = malloc(0);
+    upload_obj* uploads = malloc(0);;
+    struct pollfd *upload_fds = malloc(0);
 
 
 
@@ -111,9 +123,9 @@ int main(int argc, char *argv[])
     }
 
     // main server loop
-    while(true)
+    while(1)
     {
-        poll(fds, FD_COUNT, NO_TIMEOUT);
+        poll(fds, FD_COUNT, 200);
 
         // check if someone's ready to read
         if (fds[0].revents & POLLIN)
@@ -136,13 +148,81 @@ int main(int argc, char *argv[])
         }
         else if (fds[1].revents & POLLIN)
         {
+            uploads = realloc(objs, sizeof(upload_obj) * uploads_count+1);
+            upload_fds = realloc(upload_fds, sizeof(struct pollfd) * uploads_count+1);
+
             recv_fd = accept(fds[1].fd, (saddr*) &address, (socklen_t*) &addrlen);
             read(recv_fd, buffer, BUFFER_SIZE);
+            // buffer has the request
 
-            // TODO: Handle file from socket
+            uploads[uploads_count].socket_fd = recv_fd;
+            upload_fds[uploads_count].fd = recv_fd;
+            upload_fds[uploads_count].events = POLLOUT;
 
-            close(recv_fd);
+            char *t =strtok(buffer, " ");
+            if (strcmp(t, "GET") != 0)
+                continue;
+            char *token = strtok(NULL, " ");
+            uploads[uploads_count].file_fd = open(token, O_RDONLY);
+
+            uploads_count+=1;
+
         }
+
+        poll(upload_fds, uploads_count, 200);
+
+        for (int index = 0; index < uploads_count; index++)
+        {
+            int terminated = 0;
+            memset(buffer, 0, BUFFER_SIZE);
+
+            // if termination was orderd
+            if(upload_fds[index].revents & POLLHUP) {
+                terminated = 1;
+            }
+
+            // Writing to socket
+            if(terminated == 0 && upload_fds[index].revents & POLLOUT) {
+
+                // read bytes
+                int bytes_read = read(uploads[index].file_fd, &buffer, BUFFER_SIZE);
+
+                // if byte read - send
+                if (bytes_read) {
+                    send(uploads[index].socket_fd, &buffer, bytes_read, 0);
+                }
+
+                // else eof - close fds
+                else {
+                    terminated = 1;
+                }
+            }
+
+            // remove upload
+            if (terminated) {
+
+                close(uploads[index].file_fd);
+                close(uploads[index].socket_fd);
+
+                // remove upload from uploads
+                for(int j = index; j < uploads_count; j++) {
+                    uploads[j] = uploads[j+1];
+                    upload_fds[j] = upload_fds[j+1];
+                }
+                if (--uploads_count == 0) {
+                    free(uploads);
+                    uploads = malloc(0);
+                    free(upload_fds);
+                    upload_fds= malloc(0);
+                } else {
+                    uploads = realloc(uploads, sizeof(upload_obj) * uploads_count);
+                    upload_fds = realloc(upload_fds, sizeof(struct pollfd) * uploads_count);
+                }
+                
+                index--;
+            }
+        }
+        
 
         // zero out buffer for next poll
         memset(buffer, 0, BUFFER_SIZE);
