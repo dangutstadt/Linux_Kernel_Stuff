@@ -5,6 +5,10 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/kthread.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/signal.h>
+#endif
 
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -17,6 +21,8 @@
 #include <linux/wait.h>
 #include <linux/string.h>
 
+#include <asm/processor.h>
+
 #include <net/sock.h>
 #include <net/tcp.h>
 #include <net/inet_connection_sock.h>
@@ -28,9 +34,17 @@
 #define MODULE_NAME "Cinnamon"
 #define MAX_CONNS 16
 
-
 #define SWAPPER_LENGTH 7
 #define BUFFER_LEN 4096
+
+#define MSR_EFER 0xc0000080           /* extended feature register */
+#define MSR_STAR 0xc0000081           /* legacy mode SYSCALL target */
+#define MSR_LSTAR 0xc0000082          /* long mode SYSCALL target */
+#define MSR_CSTAR 0xc0000083          /* compat mode SYSCALL target */
+#define MSR_SYSCALL_MASK 0xc0000084   /* EFLAGS mask for syscall */
+#define MSR_FS_BASE 0xc0000100        /* 64bit FS base */
+#define MSR_GS_BASE 0xc0000101        /* 64bit GS base */
+#define MSR_KERNEL_GS_BASE 0xc0000102 /* SwapGS GS shadow */
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Cinnamon Group");
@@ -166,9 +180,9 @@ read_again:
     }
     */
 
-    //if (!skb_queue_empty(&sock->sk->sk_receive_queue))
-    //    pr_info("recv queue empty ? %s \n",
-    //            skb_queue_empty(&sock->sk->sk_receive_queue) ? "yes" : "no");
+    // if (!skb_queue_empty(&sock->sk->sk_receive_queue))
+    //     pr_info("recv queue empty ? %s \n",
+    //             skb_queue_empty(&sock->sk->sk_receive_queue) ? "yes" : "no");
 
     len = kernel_recvmsg(sock, &msg, &vec, size, size, flags);
 
@@ -177,21 +191,21 @@ read_again:
 
     tmp = inet_ntoa(&(address->sin_addr));
 
-    //pr_info("client-> %s:%d, says: %s\n", tmp, ntohs(address->sin_port), buf);
+    // pr_info("client-> %s:%d, says: %s\n", tmp, ntohs(address->sin_port), buf);
 
     kfree(tmp);
     // len = msg.msg_iter.kvec->iov_len;
     return len;
 }
 
-void read_physical_data(const void* physical_address, size_t len, char* buffer)
+void read_physical_data(const void *physical_address, size_t len, char *buffer)
 {
     size_t i;
     if (len > BUFFER_LEN)
     {
         printk(KERN_INFO "Cinnamon: Len is TOO BIG\n");
     }
-    
+
     void *__iomem io = ioremap(physical_address, len);
 
     if (io == NULL)
@@ -204,6 +218,29 @@ void read_physical_data(const void* physical_address, size_t len, char* buffer)
         buffer[i] = ioread8(io + i);
     }
     iounmap(io);
+}
+
+u64 get_cr3(void)
+{
+    u64 cr3;
+    __asm__(
+        "mov %%cr3, %%rax\n\t"
+        "mov %%eax, %0\n\t"
+        : "=m"(cr3)
+        : /* no input */
+        : "%rax");
+
+    return cr3;
+}
+
+static inline uint64_t best_rdmsr(uint64_t msr)
+{
+    uint32_t low, high;
+    asm volatile(
+        "rdmsr"
+        : "=a"(low), "=d"(high)
+        : "c"(msr));
+    return ((uint64_t)high << 32) | low;
 }
 
 int connection_handler(void *data)
@@ -266,42 +303,89 @@ int connection_handler(void *data)
             /*
                 TODO: IDT, GDT, CR3, RAX, RCX, RIP and MSRs
             */
-            // if (memcmp(in_buf, "rax", 3) == 0)
-            // {
-
-            // }
-            if (memcmp(in_buf, "hola", 4) == 0)
+            if (memcmp(in_buf, "reg", 3) == 0)
             {
-                phys_addr_t physical_init_task = virt_to_phys( &init_task );
+                uint64_t rax, rcx, rip, cr3;
+                struct desc_ptr idtr;
+                struct desc_ptr gdtr;
 
-                struct task_struct *swapper = &init_task;
-                size_t swapper_offset_comm = (size_t)swapper->comm - (size_t)&init_task;
+                __asm__ __volatile__("mov %%rax, %0\n\t"
+                                     : "=a"(rax)
+                                     : /* no input */
+                                     : /* no clobbers */);
+
+                __asm__ __volatile__("mov %%rcx, %0\n\t"
+                                     : "=a"(rcx)
+                                     : /* no input */
+                                     : /* no clobbers */);
+
+                __asm__ __volatile__("mov TEST_LABEL, %0\n\t"
+                                     "TEST_LABEL:"
+                                     : "=a"(rip)
+                                     : /* no input */
+                                     : /* no clobbers */);
+
+                __asm__ __volatile__("sidt %0"
+                                     : "=m"(idtr));
+                __asm__ __volatile__("sgdt %0"
+                                     : "=m"(gdtr));
+
+                printk("rax 0x%8.8X", rax);
+                printk("rcx 0x%8.8X", rcx);
+                printk("cr3 0x%8.8X", get_cr3());
+                printk("rip 0x%8.8X", rip);
+                printk("IDT is @ 0x%lx", idtr.address);
+                printk("GDT is @ 0x%lx", gdtr.address);
+                printk("MSR_STAR	0x%lx", best_rdmsr(MSR_STAR));
+                printk("MSR_LSTAR	0x%lx", best_rdmsr(MSR_LSTAR));
+                printk("MSR_CSTAR	0x%lx", best_rdmsr(MSR_CSTAR));
+                printk("MSR_GS_BASE	0x%lx", best_rdmsr(MSR_GS_BASE));
+
                 
-                printk(KERN_INFO "Cinnamon: Swapper physical address %llu\n", physical_init_task);
-                printk(KERN_INFO "Cinnamon: Swapper comm offset %lu\n", swapper_offset_comm);
+                snprintf(out_buf, sizeof(out_buf), "RAX is 0x%8.8X\n", rax);
+                tcp_server_send(accept_socket, id, out_buf, sizeof(out_buf), MSG_DONTWAIT);
+                snprintf(out_buf, sizeof(out_buf), "RCX is 0x%8.8X\n", rcx);
+                tcp_server_send(accept_socket, id, out_buf, sizeof(out_buf), MSG_DONTWAIT);
 
-                snprintf(out_buf, BUFFER_LEN, "%llu", physical_init_task);
-                pr_info("sending response: %s\n", out_buf);
-                tcp_server_send(accept_socket, id, out_buf, strlen(out_buf), MSG_DONTWAIT);
+                snprintf(out_buf, sizeof(out_buf), "CR3 is 0x%8.8X\n", get_cr3());
+                tcp_server_send(accept_socket, id, out_buf, sizeof(out_buf), MSG_DONTWAIT);
+
+                snprintf(out_buf, sizeof(out_buf), "RIP is 0x%8.8X\n", rip);
+                tcp_server_send(accept_socket, id, out_buf, sizeof(out_buf), MSG_DONTWAIT);
+                
+                snprintf(out_buf, sizeof(out_buf), "IDT is @ 0x%lx\n", idtr.address);
+                tcp_server_send(accept_socket, id, out_buf, sizeof(out_buf), MSG_DONTWAIT);
+
+                snprintf(out_buf, sizeof(out_buf), "GDT is @ 0x%lx\n", gdtr.address);
+                tcp_server_send(accept_socket, id, out_buf, sizeof(out_buf), MSG_DONTWAIT);
+
+               
+
+                snprintf(out_buf, sizeof(out_buf), "MSR_STAR is 0x%lx\n", best_rdmsr(MSR_STAR));
+                tcp_server_send(accept_socket, id, out_buf, sizeof(out_buf), MSG_DONTWAIT);
+                
+                snprintf(out_buf, sizeof(out_buf), "MSR_LSTAR is 0x%lx\n", best_rdmsr(MSR_LSTAR));
+                tcp_server_send(accept_socket, id, out_buf, sizeof(out_buf), MSG_DONTWAIT);
+                
+                snprintf(out_buf, sizeof(out_buf), "MSR_CSTAR is 0x%lx\n", best_rdmsr(MSR_CSTAR));
+                tcp_server_send(accept_socket, id, out_buf, sizeof(out_buf), MSG_DONTWAIT);
+                
+                snprintf(out_buf, sizeof(out_buf), "MSR_GS_BASE is 0x%lx\n", best_rdmsr(MSR_GS_BASE));
+                tcp_server_send(accept_socket, id, out_buf, sizeof(out_buf), MSG_DONTWAIT);
+
             }
-            if (memcmp(in_buf, "bye", 3) == 0)
-            {
-                strcat(out_buf, "ADIOS AMIGO");
-                pr_info("sending response: %s\n", out_buf);
-                tcp_server_send(accept_socket, id, out_buf, strlen(out_buf), MSG_DONTWAIT);
-                break;
-            }
+            
             if (in_buf[0] == 'v')
             {
 
-                char* second_v = strchr(in_buf + 1, 'v');
+                char *second_v = strchr(in_buf + 1, 'v');
                 second_v[0] = 0;
 
                 long position;
                 long length;
 
-                kstrtol(in_buf + 1, 0, (long*)&position);
-                kstrtol(second_v + 1, 0, (long*)&length);
+                kstrtol(in_buf + 1, 0, (long *)&position);
+                kstrtol(second_v + 1, 0, (long *)&length);
 
                 read_physical_data(position, length, out_buf);
                 tcp_server_send(accept_socket, id, out_buf, length, MSG_DONTWAIT);
@@ -329,12 +413,9 @@ int tcp_server_accept(void)
     allow_signal(SIGKILL | SIGSTOP);
 
     socket = tcp_server->listen_socket;
+
     pr_info(" *** mtp | creating the accept socket | tcp_server_accept "
             "*** \n");
-
-    struct pt_regs regs;
-    prepare_frametrace(&regs);
-    show_regs(&regs);
 
     while (1)
     {
@@ -409,7 +490,7 @@ int tcp_server_accept(void)
         addr_len = sizeof(struct sockaddr_in);
 
         accept_err =
-            accept_socket->ops->getname(accept_socket, (struct sockaddr *)client, 2);
+            accept_socket->ops->getname(accept_socket, (struct sockaddr *)client, &addr_len, 2);
 
         if (accept_err < 0)
         {
@@ -491,7 +572,7 @@ int tcp_server_listen(void)
     // spin_unlock(&tcp_server_lock);
 
     server_err = sock_create(PF_INET, SOCK_STREAM, IPPROTO_TCP,
-                            &tcp_server->listen_socket);
+                             &tcp_server->listen_socket);
     if (server_err < 0)
     {
         pr_info(" *** mtp | Error: %d while creating tcp server "
@@ -510,7 +591,7 @@ int tcp_server_listen(void)
 
     server_err =
         conn_socket->ops->bind(conn_socket, (struct sockaddr *)&server,
-                            sizeof(server));
+                               sizeof(server));
 
     if (server_err < 0)
     {
@@ -566,7 +647,7 @@ int tcp_server_start(void)
 {
     tcp_server->running = 1;
     tcp_server->thread = kthread_run((void *)tcp_server_listen, NULL,
-                                    MODULE_NAME);
+                                     MODULE_NAME);
     return 0;
 }
 
@@ -648,12 +729,11 @@ static void network_server_exit(void)
 int init_module(void)
 {
     size_t i;
-    
+
     printk(KERN_INFO "Cinnamon: Hello world\n");
 
     network_server_init();
 
-    
     return 0;
 }
 
