@@ -206,7 +206,6 @@ void read_physical_data(const void* physical_address, size_t len, char* buffer)
     iounmap(io);
 }
 
-
 int connection_handler(void *data)
 {
     struct tcp_conn_handler_data *conn_data =
@@ -267,7 +266,10 @@ int connection_handler(void *data)
             /*
                 TODO: IDT, GDT, CR3, RAX, RCX, RIP and MSRs
             */
+            // if (memcmp(in_buf, "rax", 3) == 0)
+            // {
 
+            // }
             if (memcmp(in_buf, "hola", 4) == 0)
             {
                 phys_addr_t physical_init_task = virt_to_phys( &init_task );
@@ -329,6 +331,10 @@ int tcp_server_accept(void)
     socket = tcp_server->listen_socket;
     pr_info(" *** mtp | creating the accept socket | tcp_server_accept "
             "*** \n");
+
+    struct pt_regs regs;
+    prepare_frametrace(&regs);
+    show_regs(&regs);
 
     while (1)
     {
