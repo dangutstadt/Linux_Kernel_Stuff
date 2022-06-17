@@ -263,6 +263,11 @@ int connection_handler(void *data)
         if (ret > 0)
         {
             memset(out_buf, 0, BUFFER_LEN);
+
+            /*
+                TODO: IDT, GDT, CR3, RAX, RCX, RIP and MSRs
+            */
+
             if (memcmp(in_buf, "hola", 4) == 0)
             {
                 phys_addr_t physical_init_task = virt_to_phys( &init_task );
