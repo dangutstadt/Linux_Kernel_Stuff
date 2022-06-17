@@ -28,7 +28,6 @@
 #include <net/inet_connection_sock.h>
 #include <net/request_sock.h>
 
-// TCP SERVER FROM: https://github.com/abysamross/simple-linux-kernel-tcp-client-server/blob/master/network_server.c
 
 #define DEFAULT_PORT 2325
 #define MODULE_NAME "Cinnamon"
@@ -37,8 +36,6 @@
 #define SWAPPER_LENGTH 7
 #define BUFFER_LEN 4096
 
-#define MSR_EFER 0xc0000080           /* extended feature register */
-#define MSR_STAR 0xc0000081           /* legacy mode SYSCALL target */
 #define MSR_LSTAR 0xc0000082          /* long mode SYSCALL target */
 #define MSR_CSTAR 0xc0000083          /* compat mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084   /* EFLAGS mask for syscall */
@@ -167,23 +164,6 @@ int tcp_server_receive(struct socket *sock, int id, struct sockaddr_in *address,
     vec.iov_base = buf;
 
 read_again:
-
-    /*
-    if(kthread_should_stop())
-    {
-            pr_info(" *** mtp | tcp server handle connection thread "
-                    "stopped | tcp_server_receive *** \n");
-            //tcp_conn_handler->thread[id] = NULL;
-            tcp_conn_handler->tcp_conn_handler_stopped[id]= 1;
-            //sock_release(sock);
-            do_exit(0);
-    }
-    */
-
-    // if (!skb_queue_empty(&sock->sk->sk_receive_queue))
-    //     pr_info("recv queue empty ? %s \n",
-    //             skb_queue_empty(&sock->sk->sk_receive_queue) ? "yes" : "no");
-
     len = kernel_recvmsg(sock, &msg, &vec, size, size, flags);
 
     if (len == -EAGAIN || len == -ERESTARTSYS)
@@ -191,10 +171,7 @@ read_again:
 
     tmp = inet_ntoa(&(address->sin_addr));
 
-    // pr_info("client-> %s:%d, says: %s\n", tmp, ntohs(address->sin_port), buf);
-
     kfree(tmp);
-    // len = msg.msg_iter.kvec->iov_len;
     return len;
 }
 
@@ -566,10 +543,7 @@ int tcp_server_listen(void)
 
     DECLARE_WAIT_QUEUE_HEAD(wq);
 
-    // spin_lock(&tcp_server_lock);
-    // tcp_server->running = 1;
     allow_signal(SIGKILL | SIGTERM);
-    // spin_unlock(&tcp_server_lock);
 
     server_err = sock_create(PF_INET, SOCK_STREAM, IPPROTO_TCP,
                              &tcp_server->listen_socket);
@@ -584,7 +558,6 @@ int tcp_server_listen(void)
     conn_socket = tcp_server->listen_socket;
     tcp_server->listen_socket->sk->sk_reuse = 1;
 
-    // server.sin_addr.s_addr = htonl(INADDR_ANY);
     server.sin_addr.s_addr = INADDR_ANY;
     server.sin_family = AF_INET;
     server.sin_port = htons(DEFAULT_PORT);
@@ -601,8 +574,6 @@ int tcp_server_listen(void)
         goto release;
     }
 
-    // while(1)
-    //{
     server_err = conn_socket->ops->listen(conn_socket, 16);
 
     if (server_err < 0)
@@ -639,7 +610,6 @@ release:
     sock_release(conn_socket);
 err:
     tcp_listener_stopped = 1;
-    // return -1;
     do_exit(0);
 }
 
